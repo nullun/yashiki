@@ -1849,9 +1849,9 @@ mod tests {
     }
 
     #[test]
-    fn test_send_to_output_hidden_on_target() {
-        // Window tags don't match target display's visible_tags
-        // → Window should be hidden (moves generated)
+    fn test_send_to_output_syncs_tags_to_target() {
+        // Window tags should be synced to target display's visible_tags
+        // → Window becomes visible with new tags
         let ws = MockWindowSystem::new()
             .with_displays(vec![
                 create_test_display(1, 0.0, 0.0, 1920.0, 1080.0),
@@ -1865,12 +1865,15 @@ mod tests {
         let mut state = State::new();
         state.sync_all(&ws);
 
-        // Move window to tag 2
+        // Window starts with tag 1 (default), move window to tag 2
         state.windows.get_mut(&100).unwrap().tags = Tag::new(2);
 
         // Display 1 shows tag 2, Display 2 shows tag 1
         state.displays.get_mut(&1).unwrap().visible_tags = Tag::new(2);
         state.displays.get_mut(&2).unwrap().visible_tags = Tag::new(1);
+
+        // Verify window starts on tag 2
+        assert_eq!(state.windows.get(&100).unwrap().tags.mask(), 2);
 
         let result = state.send_to_output(OutputDirection::Next);
         assert!(result.is_some());
@@ -1878,14 +1881,60 @@ mod tests {
         let result = result.unwrap();
         assert_eq!(result.source_display_id, 1);
         assert_eq!(result.target_display_id, 2);
-        // Window should be hidden - hide move generated
-        assert_eq!(result.window_moves.len(), 1);
-        assert_eq!(result.window_moves[0].window_id, 100);
+
+        // Window tags should be synced to target display's tag 1
+        assert_eq!(state.windows.get(&100).unwrap().tags.mask(), 1);
+
+        // Window should stay visible - no hide moves needed
+        assert!(result.window_moves.is_empty());
 
         // Window should be on target display
         assert_eq!(state.windows.get(&100).unwrap().display_id, 2);
-        // Window should be hidden (saved_frame is Some)
-        assert!(state.windows.get(&100).unwrap().is_hidden());
+        // Window should not be hidden
+        assert!(!state.windows.get(&100).unwrap().is_hidden());
+    }
+
+    #[test]
+    fn test_send_to_output_replaces_multi_tag_window() {
+        // Window with multiple tags should have ALL tags replaced with target's tags
+        let ws = MockWindowSystem::new()
+            .with_displays(vec![
+                create_test_display(1, 0.0, 0.0, 1920.0, 1080.0),
+                create_test_display(2, 1920.0, 0.0, 1920.0, 1080.0),
+            ])
+            .with_windows(vec![create_test_window(
+                100, 1000, "Safari", 100.0, 100.0, 800.0, 600.0,
+            )])
+            .with_focused(Some(100));
+
+        let mut state = State::new();
+        state.sync_all(&ws);
+
+        // Window on tags 1+2 (bitmask 3)
+        state.windows.get_mut(&100).unwrap().tags = Tag::from_mask(3);
+
+        // Display 1 shows tags 1+2, Display 2 shows tag 3
+        state.displays.get_mut(&1).unwrap().visible_tags = Tag::from_mask(3);
+        state.displays.get_mut(&2).unwrap().visible_tags = Tag::new(3);
+
+        assert_eq!(state.windows.get(&100).unwrap().tags.mask(), 3);
+
+        let result = state.send_to_output(OutputDirection::Next);
+        assert!(result.is_some());
+
+        let result = result.unwrap();
+        assert_eq!(result.source_display_id, 1);
+        assert_eq!(result.target_display_id, 2);
+
+        // Window should now have ONLY target display's tags (tag 3 = bitmask 4)
+        assert_eq!(state.windows.get(&100).unwrap().tags.mask(), 4);
+
+        // Window should stay visible (no hide moves)
+        assert!(result.window_moves.is_empty());
+
+        // Window should be on target display
+        assert_eq!(state.windows.get(&100).unwrap().display_id, 2);
+        assert!(!state.windows.get(&100).unwrap().is_hidden());
     }
 
     #[test]

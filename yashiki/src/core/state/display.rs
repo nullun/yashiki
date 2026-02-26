@@ -247,18 +247,23 @@ pub fn send_to_output(state: &mut State, direction: OutputDirection) -> Option<S
     let target_display = state.displays.get(&target_display_id)?;
     let target_frame_x = target_display.frame.x;
     let target_frame_y = target_display.frame.y;
+    let target_visible_tags = target_display.visible_tags;
 
     // Update window's display_id and frame position
     let window = state.windows.get_mut(&focused_id)?;
-    tracing::info!(
-        "Send window {} to output: {} -> {}",
-        window.id,
-        source_display_id,
-        target_display_id
-    );
+    let old_tags = window.tags;
     window.display_id = target_display_id;
+    window.tags = target_visible_tags;
     // User intentionally moved the window - clear orphan state
     window.orphaned_from = None;
+    tracing::info!(
+        "Send window {} to output: {} -> {}, tags: {} -> {}",
+        window.id,
+        source_display_id,
+        target_display_id,
+        old_tags.mask(),
+        target_visible_tags.mask()
+    );
     // Set frame to target display's position (will be overwritten by retile if visible,
     // or saved to saved_frame if hidden - either way, correct display context)
     window.frame.x = target_frame_x;

@@ -295,6 +295,13 @@ Each group sorted alphabetically, blank lines between groups.
 - `--output` option targets specific display by ID or name (partial match)
 - Window's display determined by center point location
 
+### Window Movement Between Displays
+When a window is moved to another display via `output-send` command, its tags are reset to match the target display's active tags (`visible_tags`). This mirrors new window creation behavior and ensures moved windows are immediately visible on the target display. User intent: moving window to display = moving to that display's workspace (River-style).
+
+**Related code:**
+- `core/state/display.rs`: `send_to_output()` - assigns `window.tags = target_display.visible_tags`
+- `core/state/sync.rs`: `try_create_window()` - new windows get `initial_tag = display.visible_tags`
+
 ### Monitor Connection/Disconnection
 - Polls `CGGetActiveDisplayList` in timer_callback (500ms)
 - Orphaned windows moved to fallback display, affected displays retiled
